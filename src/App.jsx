@@ -6,8 +6,7 @@ import SummaryCards from "./components/SummaryCards";
 import InventoryChart from "./components/InventoryChart";
 import InventoryInsights from "./components/InventoryInsights";
 
-const API_URL = "http://localhost:5000";
-
+const API_URL = "https://dappystock-api.onrender.com";
 function App() {
   const [activeSection, setActiveSection] =
     useState("dashboard");
