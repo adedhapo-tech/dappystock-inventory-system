@@ -11,6 +11,24 @@ function App() {
   const [activeSection, setActiveSection] =
     useState("dashboard");
 
+const [isSidebarCollapsed, setIsSidebarCollapsed] =
+  useState(false);
+
+      const [businessName, setBusinessName] = useState(
+  localStorage.getItem("businessName") || "DappyStock"
+);
+
+const [lowStockLimit, setLowStockLimit] = useState(
+  Number(localStorage.getItem("lowStockLimit")) || 5
+);
+
+const [settingsMessage, setSettingsMessage] = useState("");
+
+const [notification, setNotification] = useState({
+  message: "",
+  type: "",
+});
+
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
 
@@ -109,16 +127,18 @@ function App() {
 
   const totalProducts = products.length;
 
-  const totalStock = products.reduce(
-    (total, product) =>
-      total + Number(product.quantity || 0),
-    0
-  );
+const totalStock = products.reduce(
+  (total, product) =>
+    total + Number(product.quantity || 0),
+  0
+);
 
-  const lowStockItems = products.filter(
-    (product) => Number(product.quantity) <= 5
-  ).length;
-    function handleChange(event) {
+const lowStockItems = products.filter(
+  (product) =>
+    Number(product.quantity) <= Number(lowStockLimit)
+).length;
+
+function handleChange(event) {
     const { name, value } = event.target;
 
     setForm((current) => ({
@@ -127,8 +147,38 @@ function App() {
     }));
   }
 
+function showNotification(message, type = "success") {
+  setNotification({
+    message,
+    type,
+  });
+
+  setTimeout(() => {
+    setNotification({
+      message: "",
+      type: "",
+    });
+  }, 4000);
+}
+
   async function handleSubmit(event) {
     event.preventDefault();
+    const normalizedName = form.name.trim().toLowerCase();
+
+const duplicateProduct = products.find(
+  (product) =>
+    product.name.trim().toLowerCase() === normalizedName &&
+    product.id !== editingId
+);
+
+if (duplicateProduct) {
+  showNotification(
+    `"${form.name.trim()}" already exists. Please update the existing product instead.`,
+    "error"
+  );
+
+  return;
+}
 
     const method = editingId ? "PUT" : "POST";
     const url = editingId
@@ -147,11 +197,22 @@ function App() {
       const data = await response.json();
 
       if (!response.ok) {
-        alert(data.message);
-        return;
-      }
+  showNotification(
+    data.message || "Unable to save product.",
+    "error"
+  );
+
+  return;
+}
 
       await fetchProducts();
+
+      showNotification(
+  editingId
+    ? "Product updated successfully!"
+    : "Product added successfully!",
+  "success"
+);
 
       setForm({
         name: "",
@@ -163,6 +224,11 @@ function App() {
       setEditingId(null);
     } catch (error) {
       console.error(error);
+
+showNotification(
+  "Unable to connect to the server.",
+  "error"
+);
     }
   }
 
@@ -252,30 +318,117 @@ function App() {
     }
   }
 
+function saveSettings(event) {
+  event.preventDefault();
+
+  const cleanBusinessName = businessName.trim();
+
+  if (!cleanBusinessName) {
+    setSettingsMessage("Please enter a business name.");
+    return;
+  }
+
+  if (Number(lowStockLimit) < 1) {
+    setSettingsMessage(
+      "Low-stock limit must be at least 1."
+    );
+    return;
+  }
+
+  localStorage.setItem(
+    "businessName",
+    cleanBusinessName
+  );
+
+  localStorage.setItem(
+    "lowStockLimit",
+    String(lowStockLimit)
+  );
+
+  setBusinessName(cleanBusinessName);
+  setSettingsMessage("Settings saved successfully!");
+}
+  
   function handleNavigation(sectionId) {
     setActiveSection(sectionId);
   }
     return (
-    <div className="app-layout">
-      <Sidebar
-        activeSection={activeSection}
-        onNavigate={handleNavigation}
-      />
+   <div
+  className={`app-layout ${
+    isSidebarCollapsed
+      ? "sidebar-is-collapsed"
+      : ""
+  }`}
+>
+
+{notification.message && (
+  <div
+    className={`app-notification notification-${notification.type}`}
+    role="alert"
+  >
+    <div className="notification-icon">
+      {notification.type === "success" && "✓"}
+      {notification.type === "error" && "!"}
+      {notification.type === "warning" && "⚠"}
+    </div>
+
+    <div className="notification-content">
+      <strong>
+        {notification.type === "success" && "Success"}
+        {notification.type === "error" && "Error"}
+        {notification.type === "warning" && "Warning"}
+      </strong>
+
+      <p>{notification.message}</p>
+    </div>
+
+    <button
+      type="button"
+      className="notification-close"
+      onClick={() =>
+        setNotification({
+          message: "",
+          type: "",
+        })
+      }
+      aria-label="Close notification"
+    >
+      ×
+    </button>
+  </div>
+)}
+
+     <Sidebar
+  activeSection={activeSection}
+  onNavigate={handleNavigation}
+  isCollapsed={isSidebarCollapsed}
+  onToggle={() =>
+    setIsSidebarCollapsed((current) => !current)
+  }
+/>
 
       <main className="main-content">
-        <header className="topbar">
-          <h1>DappyStock Inventory System</h1>
+    {activeSection === "dashboard" && (
+  <header className="topbar">
+    <div className="topbar-left">
+      <p className="welcome-text">
+        👋 Welcome back
+      </p>
 
-          <input
-            type="text"
-            placeholder="Search products..."
-            value={searchTerm}
-            onChange={(e) =>
-              setSearchTerm(e.target.value)
-            }
-          />
-        </header>
+      <h1>{businessName}</h1>
 
+      <p className="topbar-subtitle">
+        Manage your inventory efficiently and keep your business growing.
+      </p>
+    </div>
+
+    <div className="topbar-right">
+      <div className="profile-circle">
+        {businessName.charAt(0).toUpperCase()}
+      </div>
+    </div>
+  </header>
+)}
         {activeSection === "dashboard" && (
           <section id="dashboard">
             <SummaryCards
@@ -299,12 +452,31 @@ function App() {
             id="products"
             className="inventory-section"
           >
-            <h2>
-              {editingId
-                ? "Edit Product"
-                : "Add Product"}
-            </h2>
+<div className="products-header">
+  <div>
+    <h2>Products</h2>
 
+    <p>
+      Add, update and manage all products in your inventory.
+    </p>
+  </div>
+
+  <input
+    className="product-search"
+    type="text"
+    placeholder="🔍 Search by product or category..."
+    value={searchTerm}
+    onChange={(e) =>
+      setSearchTerm(e.target.value)
+    }
+  />
+</div>
+
+           <h3>
+  {editingId
+    ? "Edit Product"
+    : "Add New Product"}
+</h3>
             <form
               onSubmit={handleSubmit}
               className="product-form"
@@ -657,16 +829,17 @@ function App() {
             <h2>Stock Alerts</h2>
 
             {products.filter(
-              (product) => Number(product.quantity) <= 5
-            ).length === 0 ? (
+  (product) =>
+    Number(product.quantity) <= Number(lowStockLimit)
+).length === 0 ? (
               <p>No low-stock products at the moment.</p>
             ) : (
               <div className="alerts-list">
                 {products
                   .filter(
-                    (product) =>
-                      Number(product.quantity) <= 5
-                  )
+  (product) =>
+    Number(product.quantity) <= Number(lowStockLimit)
+)
                   .map((product) => (
                     <div
                       className="alert-card"
@@ -740,39 +913,89 @@ function App() {
           </section>
         )}
 
-        {activeSection === "settings" && (
-          <section className="page-section">
-            <h2>Settings</h2>
+      {activeSection === "settings" && (
+  <section
+    id="settings"
+    className="page-section"
+  >
+    <div className="section-heading">
+      <div>
+        <p className="section-label">
+          Application preferences
+        </p>
 
-            <div className="settings-card">
-              <label>
-                Business Name
+        <h2>Settings</h2>
 
-                <input
-                  type="text"
-                  defaultValue="DappyStock"
-                />
-              </label>
+        <p>
+          Update your business information and
+          inventory alert level.
+        </p>
+      </div>
+    </div>
 
-              <label>
-                Low Stock Limit
+    <form
+      className="settings-card"
+      onSubmit={saveSettings}
+    >
+      <label>
+        Business Name
 
-                <input
-                  type="number"
-                  defaultValue="5"
-                />
-              </label>
+        <input
+          type="text"
+          value={businessName}
+          onChange={(event) => {
+            setBusinessName(event.target.value);
+            setSettingsMessage("");
+          }}
+          placeholder="Enter business name"
+        />
+      </label>
 
-              <button
-                onClick={() =>
-                  alert("Settings saved.")
-                }
-              >
-                Save Settings
-              </button>
-            </div>
-          </section>
-        )}
+      <label>
+        Low Stock Limit
+
+        <input
+          type="number"
+          min="1"
+          value={lowStockLimit}
+          onChange={(event) => {
+            setLowStockLimit(event.target.value);
+            setSettingsMessage("");
+          }}
+        />
+
+        <small>
+          Products with this quantity or less will
+          appear under Stock Alerts.
+        </small>
+      </label>
+
+      <button type="submit">
+        Save Settings
+      </button>
+
+      {settingsMessage && (
+        <p className="settings-message">
+          {settingsMessage}
+        </p>
+      )}
+    </form>
+  </section>
+)}
+
+<footer className="app-footer">
+  <div>
+    <strong>DappyStock Inventory System</strong>
+
+    <p>
+      Built with React, Express and SQLite
+    </p>
+  </div>
+
+  <span>
+    © 2026 Dappy Josh Technologies
+  </span>
+</footer>
       </main>
     </div>
   );
